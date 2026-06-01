@@ -1,71 +1,73 @@
 # srvcs-slope
 
-The slope orchestrator of the srvcs.cloud distributed standard library.
+## Name
 
-Its single concern: **geometry: slope between two points.** It owns the
-*control flow* — composing two float primitives — but does no arithmetic of its
-own. It asks [`srvcs-floatsubtract`](https://github.com/srvcs/floatsubtract) for
-the rise `dy = y2 - y1` and the run `dx = x2 - x1`, then asks
-[`srvcs-floatdivide`](https://github.com/srvcs/floatdivide) for the slope
-`dy / dx`.
+| Field | Value |
+| --- | --- |
+| Service | `srvcs-slope` |
+| Slug | `slope` |
+| Repository | `srvcs/slope` |
+| Package | `srvcs-slope` |
+| Kind | `orchestrator` |
 
-```
-slope(x1, y1, x2, y2):
-    dy = floatsubtract(y2, y1)     # rise
-    dx = floatsubtract(x2, x1)     # run
-    return floatdivide(dy, dx)     # dy / dx
-```
+## Function
 
-The result is an `f64` — a JSON number that may be fractional. For example
-`slope(0, 0, 2, 4) == 2.0` (rise `4`, run `2`).
+geometry: slope between two points
 
-A **vertical line** has `dx == 0` and no defined slope. This service does not
-special-case it: `srvcs-floatdivide` rejects division by zero with a `422`,
-which is forwarded verbatim.
+## Dependencies
 
-Validation is not handled here either. This service never calls
-`srvcs-isnumber` directly; instead its dependencies validate their own operands,
-and any `422` they raise is forwarded.
+| Dependency | Repository |
+| --- | --- |
+| `srvcs-floatsubtract` | [srvcs/floatsubtract](https://github.com/srvcs/floatsubtract) |
+| `srvcs-floatdivide` | [srvcs/floatdivide](https://github.com/srvcs/floatdivide) |
 
 ## API
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/` | Service identity, concern, and dependency list |
-| `POST` | `/` | Compute the slope of the line through two points |
-| `GET` | `/healthz` `/readyz` `/metrics` `/openapi.json` | srvcs service standard surface |
+| `GET` | `/` | Service identity |
+| `POST` | `/` | Evaluate the service function |
+| `GET` | `/healthz` | Liveness probe |
+| `GET` | `/readyz` | Readiness probe |
+| `GET` | `/metrics` | Prometheus metrics |
+| `GET` | `/openapi.json` | OpenAPI document |
 
-```sh
-curl -s -X POST localhost:8080/ -H 'content-type: application/json' \
-  -d '{"x1": 0, "y1": 0, "x2": 2, "y2": 4}'
-# {"x1":0,"y1":0,"x2":2,"y2":4,"result":2.0}
-```
+## Inputs
 
-Responses:
+| Name | Type | Required |
+| --- | --- | --- |
+| `x1` | `json` | yes |
+| `y1` | `json` | yes |
+| `x2` | `json` | yes |
+| `y2` | `json` | yes |
 
-- `200 {"x1", "y1", "x2", "y2", "result": n}` — evaluated; `result` is a float.
-- `422` — a dependency rejected an input, or the line is vertical (`dx == 0`);
-  forwarded verbatim.
-- `500` — a reachable dependency returned a `200` without a numeric `result`
-  (a contract violation).
-- `503` — a dependency is unavailable.
+## Outputs
 
-## Dependencies
-
-- [`srvcs-floatsubtract`](https://github.com/srvcs/floatsubtract)
-- [`srvcs-floatdivide`](https://github.com/srvcs/floatdivide)
+| Name | Type |
+| --- | --- |
+| `x1` | `json` |
+| `y1` | `json` |
+| `x2` | `json` |
+| `y2` | `json` |
+| `result` | `number` |
 
 ## Configuration
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `SRVCS_BIND_ADDR` | `0.0.0.0:8080` | Bind address |
-| `SRVCS_FLOATSUBTRACT_URL` | `http://127.0.0.1:8090` | Base URL of `srvcs-floatsubtract` |
-| `SRVCS_FLOATDIVIDE_URL` | `http://127.0.0.1:8091` | Base URL of `srvcs-floatdivide` |
 | `SRVCS_ENV` | `development` | Environment label for logs |
 | `RUST_LOG` | `info,tower_http=info` | Tracing filter |
+| `SRVCS_FLOATDIVIDE_URL` | `http://127.0.0.1:8091` | Base URL for srvcs-floatdivide |
+| `SRVCS_FLOATSUBTRACT_URL` | `` | Base URL for srvcs-floatsubtract |
 
-## Local checks
+## Error Behavior
+
+- `422` means the request could not be evaluated for the documented input shape.
+- `503` means a required dependency was unavailable or returned an unexpected response.
+- Dependency validation errors are forwarded when this service delegates validation.
+
+## Local Checks
 
 ```sh
 cargo fmt --check
@@ -73,11 +75,8 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-Orchestration tests stand up *computing* mock dependency services in-process —
-they read the request body and return the real `a - b` / `a / b`, so the
-composition is genuinely exercised against the asserted cases (compared
-approximately, since the result is a float). See
-[`srvcs/platform`](https://github.com/srvcs/platform) for the shared standard.
+See the [srvcs service standard](https://github.com/srvcs/platform/blob/main/STANDARD.md) for the full operational contract.
 
-> Note: the `cargoHash` in `flake.nix` is inherited from the template and must be
-> refreshed with a `nix build` before the Nix gates pass.
+## Metadata
+
+Machine-readable service metadata lives in `srvcs.yaml`. Keep it aligned with this README when the service contract changes.
